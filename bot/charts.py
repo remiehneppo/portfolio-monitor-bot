@@ -40,6 +40,42 @@ def _get_chain_color(chain: str) -> str:
     return CHAIN_COLORS.get(chain.lower(), "#888888")
 
 
+def _normalize_timestamps(rows: list[dict], window_seconds: int = 60) -> list[dict]:
+    """Group timestamps within `window_seconds` into a single canonical timestamp.
+
+    When multiple wallets are fetched sequentially, their timestamps may differ
+    by a few seconds. This function normalises them so chart aggregation works
+    correctly across all wallets.
+    """
+    if not rows:
+        return rows
+
+    # Collect unique timestamps and sort
+    ts_set = sorted({r["timestamp"] for r in rows})
+    if len(ts_set) <= 1:
+        return rows
+
+    # Build mapping: original_ts -> canonical_ts (first ts in the group)
+    ts_map: dict[str, str] = {}
+    group_start = ts_set[0]
+    ts_map[ts_set[0]] = group_start
+    for ts in ts_set[1:]:
+        diff = (_parse_ts(ts) - _parse_ts(group_start)).total_seconds()
+        if abs(diff) <= window_seconds:
+            ts_map[ts] = group_start  # same group
+        else:
+            group_start = ts
+            ts_map[ts] = group_start
+
+    # Apply mapping
+    normalised = []
+    for r in rows:
+        nr = dict(r)
+        nr["timestamp"] = ts_map.get(r["timestamp"], r["timestamp"])
+        normalised.append(nr)
+    return normalised
+
+
 def generate_wallet_chart(
     rows: list[dict],
     wallet_address: str | None = None,
@@ -56,6 +92,9 @@ def generate_wallet_chart(
 
     if not rows:
         return None
+
+    # Normalise timestamps so all wallets in same refresh round share one ts
+    rows = _normalize_timestamps(rows)
 
     # ── Group data by timestamp ────────────────────────────────────
     snapshot_data: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
@@ -224,6 +263,9 @@ def generate_token_breakdown_chart(
 
     if not rows:
         return None
+
+    # Normalise timestamps so all wallets in same refresh round share one ts
+    rows = _normalize_timestamps(rows)
 
     # ── Collect all timestamps ─────────────────────────────────────
     timestamps_set: set[str] = set()

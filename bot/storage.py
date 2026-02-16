@@ -133,12 +133,18 @@ def save_portfolio_snapshot(
     wallet_address: str,
     assets: list[dict],
     total_usd: float,
+    timestamp: str | None = None,
 ) -> Path:
-    """Append a portfolio snapshot to the user's CSV file."""
+    """Append a portfolio snapshot to the user's CSV file.
+
+    Args:
+        timestamp: Shared timestamp string for a batch of wallets.
+                   If None, generates current UTC time.
+    """
     path = _portfolio_path(user_id)
     file_exists = path.exists()
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    now = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     with open(path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)

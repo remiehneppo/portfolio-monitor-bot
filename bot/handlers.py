@@ -1,6 +1,7 @@
 """Telegram bot command handlers and scheduler."""
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from telegram import Update
@@ -26,12 +27,12 @@ def _short_addr(addr: str) -> str:
     return f"{addr[:6]}...{addr[-4:]}" if len(addr) > 12 else addr
 
 
-async def _fetch_and_save(user_id: str, wallet: dict) -> str:
+async def _fetch_and_save(user_id: str, wallet: dict, timestamp: str | None = None) -> str:
     """Fetch balance for one wallet (multichain) and save snapshot. Returns summary text."""
     address = wallet["address"]
     try:
         assets, total_usd = ankr_service.get_account_balance(address)
-        storage.save_portfolio_snapshot(user_id, address, assets, total_usd)
+        storage.save_portfolio_snapshot(user_id, address, assets, total_usd, timestamp=timestamp)
 
         lines = [f"*{_short_addr(address)}* (multichain) — ${total_usd:,.2f}"]
         for a in assets[:10]:
@@ -101,7 +102,8 @@ async def cmd_add_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
     wallet = {"address": address}
-    summary = await _fetch_and_save(user_id, wallet)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    summary = await _fetch_and_save(user_id, wallet, timestamp=ts)
     await update.message.reply_text(summary, parse_mode="Markdown")
 
     # Schedule periodic checks for this user
@@ -194,9 +196,10 @@ async def cmd_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     await update.message.reply_text(f"🔄 Refreshing {len(wallets)} wallet(s)...")
 
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     summaries = []
     for w in wallets:
-        s = await _fetch_and_save(user_id, w)
+        s = await _fetch_and_save(user_id, w, timestamp=ts)
         summaries.append(s)
 
     msg = "\n\n".join(summaries)
@@ -318,12 +321,13 @@ async def scheduled_check_user(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     logger.info("Running scheduled check for user %s (%d wallets)", user_id, len(wallets))
 
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     summaries = []
     for w in wallets:
         try:
             address = w["address"]
             assets, total_usd = ankr_service.get_account_balance(address)
-            storage.save_portfolio_snapshot(user_id, address, assets, total_usd)
+            storage.save_portfolio_snapshot(user_id, address, assets, total_usd, timestamp=ts)
             summaries.append(
                 f"*{_short_addr(address)}*: "
                 f"{len(assets)} tokens, ${total_usd:,.2f}"
