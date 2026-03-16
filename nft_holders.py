@@ -285,6 +285,12 @@ if __name__ == "__main__":
         help="Number of results per page (max 10000, default 1000)",
     )
     parser.add_argument(
+        "--ids",
+        type=str,
+        default="",
+        help="Comma-separated list of token IDs to filter (e.g. 1,2,3). Only applied to ERC1155. Default: all IDs.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="",
@@ -298,14 +304,29 @@ if __name__ == "__main__":
         short_addr = args.contract[:10]
         args.output = f"nft_holders_{short_addr}_{args.blockchain}.csv"
 
+    # Parse optional ID filter
+    filter_ids = None
+    if args.ids:
+        filter_ids = set(int(i.strip()) for i in args.ids.split(",") if i.strip())
+
     try:
         print(f"Blockchain: {args.blockchain}")
         print(f"Contract:   {args.contract}")
+        if filter_ids:
+            print(f"Filter IDs: {sorted(filter_ids)}")
         print()
 
         holders, contract_type, holders_by_token = get_nft_holders(
             args.blockchain, args.contract, args.api_key, args.page_size
         )
+
+        if filter_ids:
+            if contract_type == "ERC1155" and holders_by_token:
+                holders_by_token = {tid: v for tid, v in holders_by_token.items() if tid in filter_ids}
+                holders = set(addr for tid_holders in holders_by_token.values() for addr in tid_holders)
+                print(f"After ID filter: {len(holders_by_token)} token ID(s), {len(holders)} unique holders")
+            else:
+                print("  [Warning] --ids filter is not supported for ERC721 (ankr_getNFTHolders does not return per-token data).")
 
         print()
         print(f"Contract type: {contract_type}")

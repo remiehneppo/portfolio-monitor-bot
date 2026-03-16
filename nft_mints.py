@@ -323,6 +323,12 @@ if __name__ == "__main__":
         help="Number of results per page (max 10000, default 1000)",
     )
     parser.add_argument(
+        "--ids",
+        type=str,
+        default="",
+        help="Comma-separated list of token IDs to filter (e.g. 1,2,3). Default: all IDs.",
+    )
+    parser.add_argument(
         "--output",
         type=str,
         default="",
@@ -335,14 +341,25 @@ if __name__ == "__main__":
         short_addr = args.contract[:10]
         args.output = f"nft_mints_{short_addr}_{args.blockchain}.csv"
 
+    # Parse optional ID filter
+    filter_ids = None
+    if args.ids:
+        filter_ids = set(int(i.strip()) for i in args.ids.split(",") if i.strip())
+
     try:
         print(f"Blockchain: {args.blockchain}")
         print(f"Contract:   {args.contract}")
+        if filter_ids:
+            print(f"Filter IDs: {sorted(filter_ids)}")
         print()
 
         mints = get_nft_mints(
             args.blockchain, args.contract, args.api_key, args.type, args.page_size
         )
+
+        if filter_ids:
+            mints = [m for m in mints if m["id"] in filter_ids]
+            print(f"After ID filter: {len(mints)} mint transactions")
 
         print()
         print(f"Total mint transactions: {len(mints)}")
